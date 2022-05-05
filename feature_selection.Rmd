@@ -1,0 +1,451 @@
+---
+title: "Feature selection "
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+date: '2022-04-26'
+---
+
+
+In machine learning and statistics, feature selection, also known as variable selection, attribute selection or variable subset selection, is the process of selecting a subset of relevant features (variables, predictors) for use in model construction. Feature selection techniques are used for several reasons:
+
+*simplification of models to make them easier to interpret by researchers/users
+
+*shorter training times
+
+*to avoid the curse of dimensionality
+
+*improve data's compatibility with a learning model class
+
+*encode inherent symmetries present in the input space.
+
+we know from the prediction that the rf and lda and glm models have the best performance compared to the other models, so we will only apply the Feaure selection algorithm for these 3 models.
+
+
+<!-- # Load Libraries -->
+
+<!-- ```{r,  warning=FALSE,include= TRUE,echo=TRUE,results='hide', message=FALSE} -->
+
+<!-- library(magrittr) -->
+<!-- library(plyr) -->
+<!-- library(dplyr) -->
+<!-- library(ggplot2) -->
+<!-- library(grid) -->
+<!-- library(gridExtra) -->
+<!-- library(stringr) -->
+<!-- library(here) -->
+<!-- library(caret) -->
+<!-- library(mvtnorm) -->
+<!-- library(ggplot2) -->
+<!-- library(randomForest) -->
+<!-- library(e1071) -->
+<!-- library(caret) -->
+<!-- library(pROC) -->
+<!-- library(xgboost) -->
+<!-- library(ggrepel) -->
+<!-- library(patchwork) -->
+<!-- library(ggpubr) -->
+
+<!-- ```    -->
+
+# Load Data 
+
+```{r}
+workPath ="D:\\DataMining\\"
+cardio <- readRDS(paste (workPath , "cardio.rds", sep =""))
+```
+
+
+
+### Train test split 
+
+```{r}
+set.seed(1001)
+
+cardio_complete <- cardio[(complete.cases(cardio)),]
+
+nrow(cardio_complete)
+
+n_test <- 1500
+
+idx_test <- sample(1:nrow(cardio_complete), n_test)
+
+cardio_test <- cardio_complete[ idx_test,]
+cardio_train <- cardio_complete[ -idx_test,]
+
+
+control <- trainControl(method="cv", number=5)
+metric <- "Accuracy"
+
+
+```
+
+
+
+# Greedy Forward Selection
+
+Forward stepwise selection is a variable selection method which:
+
+Begins with a model that contains no variables (called the Null Model)
+Then starts adding the most significant variables one after the other
+Until a pre-specified stopping rule is reached or until all the variables under consideration are included in the mode.
+
+```{r}
+computeData <- F
+workPath = "D:\\DataMining\\Seafile\\01_cardio\\Projekt\\"
+
+modell <- c("glm", "lda", "rf")
+
+if (computeData) {
+  
+sff_performanceDf_Forward = expand.grid(feature_Size = seq(1, 15), model = modell)
+
+
+sff_performanceDf_Forward$auc <- NA
+
+sff_performanceDf_Forward$festure <- ""
+
+sff_performanceDf_Forward$Bestfesture <- NA
+
+cardio_train_rf <- cardio_train
+
+nbr_features <- 15
+aucperfor <- NA
+
+
+
+for (model in  c("glm", "lda", "rf"))
+{
+  sff_featureset <- c()
+  
+  while (length(sff_featureset) < nbr_features) {
+    featutes_to_test <- setdiff(rel_features, sff_featureset)
+    
+    aucperfor <- rep(NA, length(featutes_to_test))
+    
+    for (i_featutes_to_test  in 1:length(featutes_to_test)) {
+      tmp_feat_set <-
+        c(sff_featureset, featutes_to_test[i_featutes_to_test])
+      
+      mod <-
+        train(
+          target ~ .,
+          data = cardio_train_rf[, c(tmp_feat_set , "target")],
+          method = model ,
+          metric = metric,
+          trControl = control
+        )
+      
+      y_pred_prob <- predict(mod ,  cardio_test, type = "prob")
+      auc <-   roc(cardio_test$target , y_pred_prob[, 1])
+      aucperfor[i_featutes_to_test] <- auc$auc
+      
+    }
+    
+    best_idx <-   which.max(aucperfor)
+    
+    print (paste(
+      "new Feature:" ,
+      featutes_to_test[best_idx],
+      " with AUC:",
+      max(aucperfor)
+    ))
+    sff_featureset <- c(sff_featureset, featutes_to_test[best_idx])
+    
+    print (paste("FeatureSet Size:" , length(sff_featureset)))
+    
+    print (paste("FeatureSet :" , paste(sff_featureset, collapse = ",")))
+    
+    print(paste("model :", model))
+    
+    
+    if (model == "glm") {
+      sff_performanceDf_Forward$Bestfesture[length(sff_featureset)] <-
+        featutes_to_test[best_idx]
+      sff_performanceDf_Forward$auc[length(sff_featureset)] <-
+        max(aucperfor)
+      sff_performanceDf_Forward$festure[length(sff_featureset)] <-
+        paste(sff_featureset, sep = ",", collapse = ",")
+    }
+    
+    
+    if (model == "lda") {
+      sff_performanceDf_Forward$Bestfesture[15 + length(sff_featureset)] <-
+        featutes_to_test[best_idx]
+      sff_performanceDf_Forward$auc[15 + length(sff_featureset)] <-
+        max(aucperfor)
+      sff_performanceDf_Forward$festure[15 + length(sff_featureset)] <-
+        paste(sff_featureset, sep = ",", collapse = ",")
+    }
+    
+    
+    if (model == "rf") {
+      sff_performanceDf_Forward$Bestfesture[30 + length(sff_featureset)] <-
+        featutes_to_test[best_idx]
+      sff_performanceDf_Forward$auc[30 + length(sff_featureset)] <-
+        max(aucperfor)
+      sff_performanceDf_Forward$festure[30 + length(sff_featureset)] <-
+        paste(sff_featureset, sep = ",", collapse = ",")
+    }
+    
+  }
+}  
+saveRDS(sff_performanceDf_Forward, file  = paste (workPath , "sff_performanceDf_Forward.rds", sep = ""))
+
+}
+sff_performanceDf_Forward <-
+  readRDS(paste (workPath , "sff_performanceDf_Forward.rds", sep = ""))
+
+
+#Diagramm lda
+lda_forward <-
+  sff_performanceDf_Forward[sff_performanceDf_Forward$model   == "lda",]
+gg_lda_forward <-
+  ggplot(lda_forward , aes(x = feature_Size , y = auc)) +
+  geom_point(colour = "red", size = 3) +
+  geom_smooth() + ggtitle(" lda") +
+  geom_text_repel(label = round(lda_forward$auc, 4))
+
+#Diagramm glm
+glm_forward <-
+  sff_performanceDf_Forward[sff_performanceDf_Forward$model   == "glm",]
+gg_glm_forward <-
+  ggplot(glm_forward, aes(x = feature_Size , y = auc)) +
+  geom_point(colour = "yellow", size = 3) +
+  geom_smooth() + ggtitle(" glm") +
+  geom_text_repel(label = round(glm_forward$auc, 4))
+
+
+#Diagramm rf
+rf_forward <-
+  sff_performanceDf_Forward[sff_performanceDf_Forward$model   == "rf",]
+gg_rf_forward <-
+  ggplot(rf_forward, aes(x = feature_Size , y = auc)) +
+  geom_point(colour = "green", size = 3) +
+  geom_smooth() + ggtitle(" rf") +
+  geom_text_repel(label = round(rf_forward$auc, 4))
+
+#Diagramm
+gg_lda_forward + gg_glm_forward + gg_rf_forward
+
+#performanceModell
+new_df <- subset(  sff_performanceDf_Forward, select = -c(4))
+new_df
+```
+
+##Interpretation:
+
+Das Modell glm hat die beste leistung mit 8 feature, ,also 
+	
+	"age,sysBP,cigsPerDay,sex,diabetes,totChol,smoking,BMI"
+	
+und die Auc beträgt 0,7176460.
+
+
+Das Modell lda hat die beste leistung mit 8 feature, ,also 
+	
+age,sysBP,cigsPerDay,diabetes,sex,totChol,smoking,BMI
+	
+und die Auc beträgt	0.7187706.
+
+**Der Unterschied besteht darin, dass im Modell glm das sex 4-stellig ist und im Modell lda 5-stellig und das Model lda hat bessere Leistung.
+
+
+Das Modell rf hat die beste leistung mit 12 feature, ,also 
+	
+	"sysBP,sex,diabetes,cigsPerDay,stroke,age,BMI,BloodPresMed,smoking,totChol,diaBP,hypertensive"
+	
+und die Auc beträgt 0.7013221.
+
+
+
+
+# Greedy Backward selection
+
+Backward stepwise selection (or backward elimination) is a variable selection method which:
+
+Begins with a model that contains all variables under consideration (called the Full Model)
+
+Then starts removing the least significant variables one after the other
+
+Until a pre-specified stopping rule is reached or until no variable is left in the model
+
+```{r}
+
+computeData <- F
+modell <- c("glm", "lda", "rf")
+
+if (computeData) {
+
+sff_performanceDf_Backward = expand.grid(feature_Size = seq(15, 1), model = modell)
+
+sff_performanceDf_Backward$auc <- NA
+sff_performanceDf_Backward$worstfeature <- NA
+
+sff_performanceDf_Backward$festure <- ""
+
+cardio_train_rf <- cardio_train
+
+nbr_features <- 15
+aucperfor <- NA
+
+
+for (model in  c("glm", "lda", "rf")) {
+  
+  sff_featureset <- c() #  feature die rausgeschmissen werde
+  
+  rel_features <- colnames(cardio_train_rf[, -16])
+
+  
+  while (length(sff_featureset) < nbr_features) {
+    featutes_to_test <- setdiff(rel_features, sff_featureset)
+    aucperfor <- rep(NA, length(featutes_to_test))
+    
+    for (i_featutes_to_test  in 1:length(featutes_to_test)) {
+      tmp_feat_set <-
+        c(sff_featureset, featutes_to_test[i_featutes_to_test])
+
+      mod <-
+        caret::train(
+          target ~ .,
+          data = cardio_train_rf[, c("target", setdiff(rel_features, tmp_feat_set))],
+          method = model ,
+          metric = metric,
+          trControl = control
+        )
+      
+      y_pred_prob <- predict(mod ,  cardio_test, type = "prob")
+      auc <-   roc(cardio_test$target , y_pred_prob[, 1])
+      aucperfor[i_featutes_to_test] <- auc$auc
+      
+    }# for feature to test
+    
+    best_idx <- which.max(aucperfor)
+    sff_featureset <- c(sff_featureset, featutes_to_test[best_idx])
+    
+    print (
+      paste (
+        "model ",
+        model  ,
+        ";feautur size "  ,
+        length(rel_features)  - length(sff_featureset) ,
+        "  ; AUC:",
+        aucperfor[best_idx] ,
+        featutes_to_test[best_idx]
+      )
+    )
+    
+    perf_df_idx = sff_performanceDf_Backward$model == model &
+      (sff_performanceDf_Backward$feature_Size == (length(rel_features) - length(sff_featureset)+1))
+    
+    sff_performanceDf_Backward$auc[perf_df_idx] <- aucperfor[best_idx]
+    
+    sff_performanceDf_Backward$worstfeature[perf_df_idx] <-
+      featutes_to_test[best_idx]
+    
+    sff_performanceDf_Backward$festure[perf_df_idx] <-
+      paste(setdiff(rel_features, sff_featureset),
+            sep = ",",
+            collapse = ",")
+    
+  }  # for feature set size
+} # for model
+saveRDS(sff_performanceDf_Backward, file  = paste (workPath , "sff_performanceDf_Backward.rds", sep = ""))
+}
+
+sff_performanceDf_Backward <-
+  readRDS(paste (workPath , "sff_performanceDf_Backward.rds", sep = ""))
+
+
+glm_aucc <-
+  sff_performanceDf_Backward[sff_performanceDf_Backward$model   == "glm", ]
+
+gg_glm_aucc <- ggplot(glm_aucc  , aes(x = feature_Size , y = auc)) +
+  geom_point(colour = "yellow", size = 3) +
+  geom_smooth() + ggtitle(" glm") +
+  geom_text_repel(label = round(glm_aucc$auc, 4))
+
+
+#Diagramm
+gg_glm_aucc 
+
+
+
+```
+
+
+##Interpretation:
+
+Das Model glm hat die beste leistung ,mit 8 feature, ,also
+
+	"age,sysBP,cigsPerDay,sex,diabetes,totChol,smoking,BMI"
+
+und die Auc beträgt 0,7176460.
+
+
+Das Model lda hat die beste leistung mit 8 feature, ,also
+
+age,sysBP,cigsPerDay,diabetes,sex,totChol,smoking,BMI
+
+und die Auc beträgt	0.7187706.
+
+**Der Unterschied besteht darin, dass im Modell glm das sex 4-stellig ist und im Modell lda 5-stellig und das Model lda hat bessere Leistung.
+
+
+Das Model rf hat die beste leistung mit 12 feature, ,also
+
+	"sysBP,sex,diabetes,cigsPerDay,stroke,age,BMI,BloodPresMed,smoking,totChol,diaBP,hypertensive"
+
+und die Auc beträgt 0.7013221.
+
+
+
+
+
+
+
+### Featurte importance / Feature selection
+```{r}
+### RFE= recursive feature elimination
+### berechne model,
+##### werfe das schlechteste Feature weg
+#### loop bis keine Feature mehr übrig sind.
+
+computeData <- F
+
+
+if (computeData) {
+cardio_train_rf <- cardio_train
+cardio_train_rf$target = factor(cardio_train_rf$target)
+
+feature_list <- colnames(cardio_train_rf[, -16])
+
+rfePerformace <- data.frame (id = seq(15))
+rfePerformace$auc <- NA
+rfePerformace$feature_list <- NA
+
+while (length(feature_list) > 0) {
+  mod <-
+    randomForest(target ~ ., data = cardio_train_rf[, c(feature_list, "target")]
+                 , importance = T)
+  
+  feat_importance <- data.frame(mod$importance)
+  feat_importance <-
+    feat_importance[order(feat_importance$MeanDecreaseGini, decreasing = T), ]
+  
+  y_pred_prob <- predict(mod ,  cardio_test, type = "prob")
+  
+  auc <-   roc(cardio_test$target , y_pred_prob[, 1])
+  rfePerformace$auc[16 - length(feature_list)]  <- auc$auc
+  rfePerformace$feature_list[16 - length(feature_list)] <-
+    paste(feature_list, sep = ",", collapse = ",")
+  
+  feature_list <-
+    row.names(feat_importance)[1:nrow(feat_importance) - 1]
+  
+}
+feature_list <- row.names(varImp(mod)$importance)
+feature_list <- feature_list[1:length(feature_list)]
+}
+```
